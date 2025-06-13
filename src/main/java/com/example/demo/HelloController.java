@@ -9,6 +9,6 @@ public class HelloController {
 
     @GetMapping("/")
     public String hello() {
-        return "Hello from " + serverName;
+        return "Hello from v0.0.2" + serverName;
     }
 } 
