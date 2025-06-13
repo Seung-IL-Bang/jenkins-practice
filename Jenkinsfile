@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     triggers {
-        pollSCM('H/1 * * * *')  // 1분마다 체크 (개발용으로는 충분히 빠름)
+        pollSCM('* * * * *')  // 1분마다 체크 (개발용으로는 충분히 빠름)
     }
     
     environment {
