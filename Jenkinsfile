@@ -4,16 +4,35 @@ pipeline {
     environment {
         IMAGE_NAME = 'spring-hello'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
-        REGISTRY = 'localhost:5000'  // 로컬 테스트용
+        REGISTRY = 'localhost:5000'
     }
     
     stages {
+        stage('Prepare') {
+            steps {
+                script {
+                    echo "Preparing environment..."
+                    // 네트워크 생성 (이미 있으면 무시)
+                    sh "docker network create jenkins-network || true"
+                    
+                    // curl 설치 확인
+                    sh "which curl || (apt-get update && apt-get install -y curl)"
+                    
+                    // Docker 권한 확인
+                    sh "docker --version"
+                }
+            }
+        }
+        
         stage('Build') {
             steps {
                 script {
                     echo "Building Docker image..."
                     sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
                     sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest"
+                    
+                    // 빌드된 이미지 확인
+                    sh "docker images ${IMAGE_NAME}:${IMAGE_TAG}"
                 }
             }
         }
@@ -23,11 +42,11 @@ pipeline {
                 script {
                     echo "Deploying to Server 1..."
                     
-                    // 서버 1 중지
+                    // 기존 컨테이너 정리
                     sh "docker stop server1 || true"
                     sh "docker rm server1 || true"
                     
-                    // 새 이미지로 서버 1 시작
+                    // 새 컨테이너 시작
                     sh """
                         docker run -d \
                         --name server1 \
@@ -38,11 +57,21 @@ pipeline {
                         ${IMAGE_NAME}:${IMAGE_TAG}
                     """
                     
-                    // 헬스체크
-                    sh "sleep 10"
-                    sh "curl -f http://localhost:8082/ || exit 1"
+                    // 컨테이너 시작 확인
+                    sh "docker ps | grep server1"
                     
-                    echo "Server 1 deployment completed successfully"
+                    // 헬스체크 (더 안전하게)
+                    echo "Waiting for server1 to start..."
+                    sh """
+                        for i in {1..30}; do
+                            if curl -f http://localhost:8082/ 2>/dev/null; then
+                                echo "Server1 is healthy!"
+                                break
+                            fi
+                            echo "Attempt \$i: Server1 not ready yet..."
+                            sleep 5
+                        done
+                    """
                 }
             }
         }
@@ -52,11 +81,9 @@ pipeline {
                 script {
                     echo "Deploying to Server 2..."
                     
-                    // 서버 2 중지
                     sh "docker stop server2 || true"
                     sh "docker rm server2 || true"
                     
-                    // 새 이미지로 서버 2 시작
                     sh """
                         docker run -d \
                         --name server2 \
@@ -67,24 +94,29 @@ pipeline {
                         ${IMAGE_NAME}:${IMAGE_TAG}
                     """
                     
-                    // 헬스체크
-                    sh "sleep 10"
-                    sh "curl -f http://localhost:8083/ || exit 1"
+                    sh "docker ps | grep server2"
                     
-                    echo "Server 2 deployment completed successfully"
+                    echo "Waiting for server2 to start..."
+                    sh """
+                        for i in {1..30}; do
+                            if curl -f http://localhost:8083/ 2>/dev/null; then
+                                echo "Server2 is healthy!"
+                                break
+                            fi
+                            echo "Attempt \$i: Server2 not ready yet..."
+                            sleep 5
+                        done
+                    """
                 }
             }
         }
         
-        stage('Health Check') {
+        stage('Final Health Check') {
             steps {
                 script {
                     echo "Performing final health check..."
-                    
-                    // 두 서버 모두 헬스체크
-                    sh "curl -f http://localhost:8082/ || exit 1"
-                    sh "curl -f http://localhost:8083/ || exit 1"
-                    
+                    sh "curl -f http://localhost:8082/ && echo 'Server1 OK'"
+                    sh "curl -f http://localhost:8083/ && echo 'Server2 OK'"
                     echo "All servers are healthy!"
                 }
             }
@@ -94,17 +126,24 @@ pipeline {
     post {
         always {
             script {
-                // 이전 이미지 정리 (최근 5개만 유지)
+                echo "Cleaning up old images..."
                 sh """
-                    docker images ${IMAGE_NAME} --format "table {{.Repository}}\\t{{.Tag}}\\t{{.ID}}" | tail -n +2 | sort -k2 -n | head -n -5 | awk '{print \$3}' | xargs -r docker rmi -f || true
+                    docker images ${IMAGE_NAME} --format "table {{.Repository}}\\t{{.Tag}}\\t{{.ID}}" | \
+                    tail -n +2 | sort -k2 -nr | tail -n +6 | awk '{print \$3}' | \
+                    xargs -r docker rmi -f || true
                 """
             }
         }
         failure {
-            echo "Deployment failed! Check the logs above."
+            script {
+                echo "Deployment failed! Collecting debug info..."
+                sh "docker ps -a | grep server || true"
+                sh "docker logs server1 || true"
+                sh "docker logs server2 || true"
+            }
         }
         success {
             echo "Rolling deployment completed successfully!"
         }
     }
-} 
+}
