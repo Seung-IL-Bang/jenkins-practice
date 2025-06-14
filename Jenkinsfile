@@ -51,6 +51,7 @@ pipeline {
                 script {
                     echo "Building Docker image..."
                     sh "docker build --no-cache -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                    sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:${IMAGE_TAG}"
                 }
             }
         }
@@ -72,7 +73,7 @@ pipeline {
                         -p 8082:8080 \
                         -e SERVER_NAME=server1 \
                         --restart unless-stopped \
-                        ${IMAGE_NAME}:${IMAGE_TAG}
+                        ${IMAGE_NAME}:latest
                     """
                     
                     // 헬스체크
@@ -115,7 +116,7 @@ pipeline {
                         -p 8083:8080 \
                         -e SERVER_NAME=server2 \
                         --restart unless-stopped \
-                        ${IMAGE_NAME}:${IMAGE_TAG}
+                        ${IMAGE_NAME}:latest
                     """
                     
                     // 헬스체크
