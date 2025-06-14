@@ -4,7 +4,10 @@ WORKDIR /app
 COPY . .
 # gradlew에 실행 권한 추가
 RUN chmod +x ./gradlew
-RUN ./gradlew bootJar
+# 소스코드 복사 (여기서 캐시 무효화)
+COPY src/ src/
+# 클린 빌드
+RUN ./gradlew clean bootJar --no-daemon --no-build-cache
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
