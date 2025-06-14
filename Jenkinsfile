@@ -14,6 +14,10 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+
+                // 워크스페이스 완전 정리
+                cleanWs()
+
                 // Git에서 소스코드 가져오기
                 git branch: 'main', url: 'https://github.com/Seung-IL-Bang/jenkins-practice'
             }
@@ -46,7 +50,7 @@ pipeline {
             steps {
                 script {
                     echo "Building Docker image..."
-                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                    sh "docker build --no-cache -t ${IMAGE_NAME}:${IMAGE_TAG} ."
                     sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest"
                 }
             }
